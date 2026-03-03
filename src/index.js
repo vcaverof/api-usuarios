@@ -7,7 +7,7 @@ console.log("Rutas cargadas:", usersRoutes.stack.map(r => r.route.path));
 app.use(express.json());
 
 // Prefijo para los endpoints
-app.use("/api", usersRoutes);
+app.use("/", usersRoutes);
 
 app.listen(3000, () => {
   console.log("Servidor escuchando en puerto 3000");
