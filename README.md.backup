@@ -1,0 +1,335 @@
+# PRÁCTICA API REST DOCKERIZADA
+
+By Víctor Cavero Fernández
+
+## Crear la carpeta del proyecto
+
+Creamos la carpeta en la que vamos a desarrollar el proyecto. En mi caso lo haré en el escritorio para mayor comodidad.
+
+```
+mkdir api-usuarios
+cd api-usuarios
+```
+
+La carpeta **api-usuarios** será la raíz de proyecto y contendrá:
+
+1. Dockerfile
+2. docker-compose.yml
+3. package.json
+4. src/ (con el código de la API)
+
+## Inicializar el proyecto de Node.js
+
+```
+npm init -y
+```
+
+Con este comando generamos el archivo package.json básico. Dicho archivo definde el nombre y la versión del proyecto, las dependencias necesarias, el script utilizado para arrancar la API dentro del contenedor y la información básica del proyecto.
+
+![](./img/npm-init.png)
+
+
+## Crear la estructura de carpetas
+
+Creamos las diferentes carpetas y archivos que vamos a necesitar a lo largo de la práctica. Debería quedar una estructura parecida a esto:
+
+```
+api-usuarios/
+│
+├── docker-compose.yml
+├── Dockerfile
+├── package.json
+│
+└── src/
+    ├── index.js
+    ├── db.js
+    ├── controllers/
+    └── routes/
+```
+
+![](./img/estructura.png)
+
+## Instalar dependencias necesarias
+
+Instalamos las dependencias mínimas para una API con MySQL
+
+```
+npm install express mysql2
+```
+
+![](./img/npm-install.png)
+
+## Configurar scripts en package.json
+
+```
+"scripts": {
+  "start": "node src/index.js"
+}
+```
+
+![](./img/packageJSON.png)
+
+Este será el script que Docker ejecutará dentro del contenedor
+
+## Crear un servidor Express mínimo
+
+En el archivo index.js dentro de la carpeta src, tenemos que tener el siguiente código:
+
+```
+const express = require("express");
+const app = express();
+const db = require("./db");
+
+app.use(express.json());
+
+app.get("/", (req, res) => {
+  res.send("API funcionando correctamente");
+});
+
+app.listen(3000, () => {
+  console.log("API escuchando en puerto 3000");
+});
+
+```
+
+![](./img/indexJS.png)
+
+
+Este archivo es el punto de entrada de la API. Sirve para crear el servidor Express, configurar los middlewares como express.json(), definir rutas básicas y arrancar el servidor en el puerto 3000.
+
+## Configurar la conexión a MySQL
+
+En el archivo db.js dentro de la carpeta src tenemos que tener el siguiente codigo:
+
+```
+const mysql = require("mysql2");
+
+const connection = mysql.createConnection({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME
+});
+
+connection.connect(err => {
+  if (err) {
+    console.error("Error conectando a MySQL:", err);
+    return;
+  }
+  console.log("Conectado a MySQL");
+});
+
+module.exports = connection;
+```
+
+![](./img/dbJS.png)
+
+
+Este archivo se encarga de importar el cliente MySQL2, leer las variables de entorno (como el host, usuario, contraseña, base de datos...), establecer la conexión con MySQL dentro de Docker y exportar la conexión para usarla en rutas y controladores.
+
+## Crear la base de datos
+
+En mi caso voy a utilizar XAMPP y PHPMyAdmin para crear la base de datos. Tendrá el nombre de **usuariosdb** y tendrá la siguiente tabla:
+
+```
+CREATE TABLE usuarios (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(100) NOT NULL,
+  email VARCHAR(150) NOT NULL UNIQUE,
+  edad INT NOT NULL
+);
+```
+
+![](./img/usuariosdb.png)
+
+## Crear el Dockerfile
+
+```
+FROM node:18
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "start"]
+
+```
+
+Este archivo utiliza una imagen oficial de Node.js versión 18 como base. Esta imagen ya incluye Node y npm lo que permite ejecutar aplicaciones JavaScript dentro del contenedor.
+
+Define también la carpeta /app dentro del contenedor como el directorio donde se ejecutará la aplicación, es decir, que todo lo que copiemos o instalemos a partir de aquí se hará dentro de esa ruta.
+
+Tenemos también la exposición del puerto, para indicar que la aplicación escucha en el puerto 3000 y el comando de arranque con mp y start (definido en el package.json).
+
+![](./img/dockerfile.png)
+## Crear el docker-compose.yml
+
+```
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:5.7
+    container_name: mysql-usuarios
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_DATABASE: usuariosdb
+      MYSQL_ROOT_HOST: "%"
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin-usuarios
+    restart: always
+    ports:
+      - "8080:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: root
+      PMA_PASSWORD: 1234
+    depends_on:
+      - mysql
+
+  api:
+    build: .
+    container_name: api-usuarios
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DB_HOST: mysql
+      DB_USER: root
+      DB_PASSWORD: 1234
+      DB_NAME: usuariosdb
+    depends_on:
+      - mysql
+
+volumes:
+  mysql-data:
+```
+
+En este archivo definimos muchas cosas:
+
+1. En cuanto al MySQL: versión del formato (versión del estándar Compose), el servicio MySQL (levanta un contenedor con MySQL 8 y nombre personalizado) y configura el MySQL (contraseña, base de datos inicial y puertos). Además expone MySQL en el puerto 3307 para evitar posibles conflictos con XAMPP (en caso de tenerlo activado).
+
+2. En cuanto a phpMyAdmin: interfaz web para gestionar el MySQL (accesible desde el navegador con *http://localhost:8080*). También indicamos que debe conectarse al servicio MySQL de compose y muy importante, garantizamos que MySQL arranca siempre **ANTES** que phpMyAdmin, para evitar posibles errores futuros.
+
+3. En cuanto al servicio API (Node.js): construye la imagen usando Dockerfile de la raíz, expone la API en *http://localhost:3000* y variables de entorno que la API usa para conectarse a MySQL.
+
+
+Importante destacar, que indicamos a MySQL que arranque siempre **ANTES** que phpMyAdmin, para evitar errores.
+
+## Levantar los contenedores y comprobar el funcionamiento del proyecto.
+
+Antes de levantar el proyecto, es importante eliminar cualquier contenedor, red o volumen antiguo que pueda generar problemas.
+
+```
+docker compose down -v
+```
+
+![](./img/docker-down.png)
+
+Una vez hagamos esto, podemos levantar todos los servicios:
+
+```
+docker compose up -d --build
+```
+
+Con este comando, forzamos a Docker a reconstruir la imagen de la API, ejecutamos los contenedores en segundo plano y levantamos MySQL, phpMyAdmin y la API.
+
+![](./img/docker-up.png)
+
+## Verificar que los contenedores están activos
+
+Utilizamos el siguiente comando: 
+
+```
+docker ps
+```
+
+![](./img/docker-ps.png)
+
+## Acceder a phpMyAdmin y crear la tabla
+
+Ahora tenemos que crear la tabla, pero en la base de datos que tenemos montada en Docker. Tenemos que acceder a phpMyAdmin desde:
+
+```
+http://localhost:8080
+```
+
+Si todo ha ido bien, debería pedirnos un usuario y contraseña al entrar (los que hemos establecido nosotros). Ahora, reutilizando el codigo de antes, creamos la tabla de usuarios.
+
+## Crear el CRUD completo
+
+Vamos a crear las siguientes rutas:
+
+```
+GET → obtener todos los usuarios
+
+GET → obtener un usuario por ID
+
+POST → crear usuario
+
+PUT → actualizar usuario
+
+DELETE → eliminar usuario
+```
+
+Para hacerlo de forma correcta y organizada, vamos a utilizar controladores para cada petición y rutas.
+
+Creamos una carpeta dentro de **src** que se llame controllers, y dentro creamos el archivo **usersController.js**
+
+![](./img/controller.png)
+
+*Hay más código pero es demasiado largo*
+
+Posteriromente vamos a crear dentro de la carpeta **routes** el archivo **usersRoutes.js**, donde vamos a definir todos los endpoints para utilizar nuestra API.
+
+![](./img/routes.png)
+
+## Modificar el index.js
+
+Tenemos que añadir nuestras nuevas rutas al index.js para que funcionen.
+
+![](./img/indexJS2.png)
+
+## Probar el CRUD
+
+Método GET
+
+![](./img/get.png)
+
+Método POST
+
+![](./img/post.png)
+
+
+Método UPDATE / PUT
+
+![](./img/update.png)
+
+
+Método DELETE
+
+![](./img/delete.png)
+
+## Docker Desktop
+
+Dejo también una captura del Docker Desktop donde aparece todo lo que hemos estado utilizando activo:
+
+![](./img/docker.png)
+
+## Conclusión
+
+Con esto daríamos la práctica por finalizada. Me ha costado bastante sacarla adelante porque he ido muy perdido durante el curso. Esa asignatura me cuesta bastante, sobre todo porque mi base del año pasado en sistemas informáticos es muy pobre. Empecé el curso sin saber siquiera lo que era mkdir o sudo, pero he conseguido hacer la práctica (con mucha ayuda) y poder entregarla a tiempo. He tenido basantes problemas sobre todo con la versión de MySQL a la hora del paso final con el CRUD, por lo que decidí hacerlo con la 5.7.
+
+Espero que tus preguntas en clase no
