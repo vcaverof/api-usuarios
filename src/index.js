@@ -1,22 +1,14 @@
 const express = require("express");
 const app = express();
-const db = require("./db");
 const usersRoutes = require("./routes/usersRoutes");
-console.log("Rutas de usuarios cargadas");
+console.log("Rutas cargadas:", usersRoutes.stack.map(r => r.route.path));
 
 
 app.use(express.json());
 
-// Ruta principal
-app.get("/", (req, res) => {
-  res.send("API funcionando correctamente");
-});
-
-// Rutas del CRUD
-app.use("/api/users", usersRoutes);
+// Prefijo para los endpoints
+app.use("/api", usersRoutes);
 
 app.listen(3000, () => {
-  console.log("API escuchando en puerto 3000");
+  console.log("Servidor escuchando en puerto 3000");
 });
-
-

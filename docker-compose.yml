@@ -1,28 +1,26 @@
-version: "3.9"
 services:
   mysql:
     image: mysql:5.7
     container_name: mysql-usuarios
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: 1234
-      MYSQL_DATABASE: usuariosdb
-      MYSQL_ROOT_HOST: "%"
-    ports:
-      - "3306:3306"
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_ROOT_HOST: ${MYSQL_ROOT_HOST}
     volumes:
       - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   phpmyadmin:
     image: phpmyadmin/phpmyadmin
     container_name: phpmyadmin-usuarios
     restart: always
-    ports:
-      - "8080:80"
     environment:
       PMA_HOST: mysql
       PMA_USER: root
-      PMA_PASSWORD: 1234
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "8080:80"
     depends_on:
       - mysql
 
@@ -30,13 +28,13 @@ services:
     build: .
     container_name: api-usuarios
     restart: always
-    ports:
-      - "3000:3000"
     environment:
       DB_HOST: mysql
       DB_USER: root
-      DB_PASSWORD: 1234
-      DB_NAME: usuariosdb
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      DB_NAME: ${MYSQL_DATABASE}
+    ports:
+      - "3000:3000"
     depends_on:
       - mysql
 
